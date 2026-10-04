@@ -151,17 +151,27 @@ export const AuthProvider = ({ children }) => {
     return { success: false, message: "Invalid username or credentials" };
   };
 
-  // Logout handler
-  const logout = async () => {
-    try {
-      await api.post("/logout");
-    } catch {
-      // Ignore network errors on logout
-    } finally {
-      localStorage.removeItem("campusta_token");
-      setUser(null);
+  // Logout handler - immediate local cleanup and non-blocking API token revocation
+  const logout = useCallback(async () => {
+    const token = localStorage.getItem("campusta_token");
+
+    // 1. Immediately wipe local auth state & storage to ensure instantaneous UI response
+    localStorage.removeItem("campusta_token");
+    localStorage.removeItem("campusta_user");
+    setUser(null);
+
+    // 2. Revoke token on backend if available
+    if (token) {
+      try {
+        await api.post("/logout");
+      } catch (err) {
+        // Safe to ignore network or expiration issues
+        console.warn("Backend token revocation note:", err.message);
+      }
     }
-  };
+
+    return { success: true };
+  }, []);
 
   // Add Ticket handler
   const addTicket = async (ticketData) => {
