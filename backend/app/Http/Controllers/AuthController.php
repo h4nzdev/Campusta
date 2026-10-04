@@ -31,14 +31,25 @@ class AuthController extends Controller
             ->orWhere('school_id', $cleanId)
             ->first();
 
-        // For demo credentials where password is 'password' or default hash check
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            // Also check if fallback match for convenience in demo setup
-            if (!$user || ($request->password !== 'password' && $request->password !== 'password123')) {
-                throw ValidationException::withMessages([
-                    'identifier' => ['The provided credentials are incorrect or user does not exist.'],
-                ]);
+        // Alias matching for common variations (e.g. admin@uspf.edu.ph, admin, student, etc.)
+        if (!$user) {
+            $lowerId = strtolower($cleanId);
+            if ($lowerId === 'admin@uspf.edu.ph' || $lowerId === 'admin' || $lowerId === 'administrator') {
+                $user = User::where('username', 'admin_uspf')->orWhere('role', UserRole::ADMIN)->first();
+            } elseif ($lowerId === 'student@uspf.edu.ph' || $lowerId === 'student') {
+                $user = User::where('username', 'hanz_student')->orWhere('role', UserRole::STUDENT)->first();
+            } elseif ($lowerId === 'faculty@uspf.edu.ph' || $lowerId === 'faculty' || $lowerId === 'prof_davis@uspf.edu.ph') {
+                $user = User::where('username', 'prof_davis')->orWhere('role', UserRole::FACULTY)->first();
+            } elseif ($lowerId === 'maintenance@uspf.edu.ph' || $lowerId === 'maintenance') {
+                $user = User::where('username', 'raniel_maintenance')->orWhere('role', UserRole::MAINTENANCE)->first();
             }
+        }
+
+        // Check credentials (accept 'password' for demo accounts)
+        if (!$user || (!Hash::check($request->password, $user->password) && $request->password !== 'password' && $request->password !== 'password123')) {
+            throw ValidationException::withMessages([
+                'identifier' => ['The provided credentials are incorrect or user does not exist.'],
+            ]);
         }
 
         // Generate Sanctum Access Token

@@ -126,12 +126,25 @@ export const AuthProvider = ({ children }) => {
       // If network error / backend offline, fallback to mock users for seamless presentation
       console.warn("Backend login error, trying mock credentials fallback:", err.message);
       const cleanId = identifier.trim().toLowerCase();
-      const foundUser = initialUsers.find(
+      let foundUser = initialUsers.find(
         (u) =>
           u.username.toLowerCase() === cleanId ||
           u.email.toLowerCase() === cleanId ||
           u.schoolId.toLowerCase() === cleanId
       );
+
+      // Alias matching
+      if (!foundUser) {
+        if (cleanId === "admin@uspf.edu.ph" || cleanId === "admin" || cleanId === "administrator") {
+          foundUser = initialUsers.find((u) => u.role === "admin");
+        } else if (cleanId === "student@uspf.edu.ph" || cleanId === "student") {
+          foundUser = initialUsers.find((u) => u.role === "student");
+        } else if (cleanId === "faculty@uspf.edu.ph" || cleanId === "faculty" || cleanId === "prof.davis@uspf.edu.ph") {
+          foundUser = initialUsers.find((u) => u.role === "faculty");
+        } else if (cleanId === "maintenance@uspf.edu.ph" || cleanId === "maintenance") {
+          foundUser = initialUsers.find((u) => u.role === "maintenance");
+        }
+      }
 
       if (foundUser) {
         setUser(foundUser);
