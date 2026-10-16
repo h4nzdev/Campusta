@@ -17,6 +17,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { login as loginService } from "../../services/authService";
 
 const FACTS = [
   {
@@ -52,7 +53,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
@@ -61,15 +62,16 @@ export default function LoginPage() {
       return;
     }
 
-    // Temporary mock user until backend is wired up
-    const mockUser = {
-      name: "Test User",
-      email: identifier,
-      role: "Admin",
-    };
-
-    login(mockUser);
-    navigate("/user/dashboard", { replace: true });
+    try {
+      const user = await loginService({ identifier, password });
+      login(user, "no-token-yet");
+      navigate("/user/dashboard", { replace: true });
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          "Invalid credentials. Please try again.",
+      );
+    }
   };
 
   return (
