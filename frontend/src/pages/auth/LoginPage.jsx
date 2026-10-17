@@ -49,6 +49,7 @@ export default function LoginPage() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -63,14 +64,14 @@ export default function LoginPage() {
     }
 
     try {
+      setLoading(true);
       const user = await loginService({ identifier, password });
-      login(user, "no-token-yet");
+      login(user);
       navigate("/user/dashboard", { replace: true });
     } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          "Invalid credentials. Please try again.",
-      );
+      setError(err?.response?.data?.message || "Invalid credentials.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -276,14 +277,15 @@ export default function LoginPage() {
 
             <motion.button
               type="submit"
+              disabled={loading}
               whileHover={{ y: -2 }}
               whileTap={{ scale: 0.98 }}
               transition={{ type: "spring", stiffness: 400, damping: 25 }}
-              className="w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium
+              className={`w-full py-2.5 rounded-xl ${loading ? "bg-blue-300" : "bg-blue-600"} text-white text-sm font-medium
                 hover:bg-blue-700 shadow-[0_12px_32px_-12px_rgba(59,130,246,0.7)] transition
-                inline-flex items-center justify-center gap-2"
+                inline-flex items-center justify-center gap-2`}
             >
-              Sign In
+              {loading ? "Logging in" : "Sign In"}
               <ArrowRight className="w-4 h-4" />
             </motion.button>
           </form>

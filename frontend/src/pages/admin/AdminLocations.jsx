@@ -1,5 +1,5 @@
 // src/pages/admin/AdminLocations.jsx
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MapPin,
@@ -18,77 +18,18 @@ import {
   Hash,
   List,
   LayoutGrid,
+  Loader2,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import AdminLayout from "../../layout/AdminLayout";
 import Card from "../../components/ui/Card";
+import {
+  getLocations,
+  store as storeLocation,
+} from "../../services/locationService";
 
-// ---------- Placeholder data ----------
-const LOCATIONS = [
-  {
-    id: 1,
-    qr: "QR-ITBU-ROOM302",
-    building: "ITBU",
-    floor: "3rd Floor",
-    room: "Room 302",
-    type: "Classroom",
-    tickets: 2,
-  },
-  {
-    id: 2,
-    qr: "QR-ITBU-LAB1",
-    building: "ITBU",
-    floor: "2nd Floor",
-    room: "Lab 1",
-    type: "Laboratory",
-    tickets: 3,
-  },
-  {
-    id: 3,
-    qr: "QR-ITBU-LAB2",
-    building: "ITBU",
-    floor: "2nd Floor",
-    room: "Lab 2",
-    type: "Laboratory",
-    tickets: 0,
-  },
-  {
-    id: 4,
-    qr: "QR-MAIN-CR2F",
-    building: "Main Building",
-    floor: "2nd Floor",
-    room: "CR 2F",
-    type: "Restroom",
-    tickets: 1,
-  },
-  {
-    id: 5,
-    qr: "QR-MAIN-ROOM205",
-    building: "Main Building",
-    floor: "2nd Floor",
-    room: "Room 205",
-    type: "Classroom",
-    tickets: 0,
-  },
-  {
-    id: 6,
-    qr: "QR-ADMIN-FACULTY",
-    building: "Admin Building",
-    floor: "1st Floor",
-    room: "Faculty Room",
-    type: "Office",
-    tickets: 2,
-  },
-  {
-    id: 7,
-    qr: "QR-LABWING-AVR",
-    building: "Lab Wing",
-    floor: "1st Floor",
-    room: "AVR",
-    type: "Function Hall",
-    tickets: 0,
-  },
-];
-
+/* ---------------- Static UI config ---------------- */
 const BUILDINGS = [
   "All",
   "ITBU",
@@ -105,15 +46,59 @@ const TYPE_STYLES = {
   "Function Hall": "bg-rose-50 text-rose-600",
 };
 
+/* ---------------- Helpers ---------------- */
+// The backend returns { id, qr_code, building, floor, room, ... }
+// We normalise to the shape the UI expects: { id, qr, building, floor, room, type, tickets }
+function normalizeLocation(raw) {
+  return {
+    id: raw.id ?? Date.now(),
+    qr: raw.qr_code ?? raw.qr ?? "",
+    building: raw.building ?? "",
+    floor: raw.floor ?? "",
+    room: raw.room ?? "",
+    type: raw.type ?? "Classroom",
+    tickets: raw.tickets ?? 0,
+  };
+}
+
 export default function AdminLocations() {
   const [query, setQuery] = useState("");
   const [building, setBuilding] = useState("All");
   const [view, setView] = useState("list"); // "list" | "grid"
   const [preview, setPreview] = useState(null);
   const [copied, setCopied] = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
 
+  /* ---------------- Remote state ---------------- */
+  const [locations, setLocations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+
+  const fetchLocations = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await getLocations();
+      const list = Array.isArray(data) ? data : (data?.data ?? []);
+      setLocations(list.map(normalizeLocation));
+    } catch (err) {
+      setLoadError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Failed to load locations.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLocations();
+  }, [fetchLocations]);
+
+  /* ---------------- Derived ---------------- */
   const filtered = useMemo(() => {
-    return LOCATIONS.filter((l) => {
+    return locations.filter((l) => {
       const matchesBuilding = building === "All" || l.building === building;
       const matchesQuery =
         !query ||
@@ -122,8 +107,23 @@ export default function AdminLocations() {
         l.building.toLowerCase().includes(query.toLowerCase());
       return matchesBuilding && matchesQuery;
     });
-  }, [query, building]);
+  }, [locations, query, building]);
 
+  const buildingOptions = useMemo(() => {
+    const unique = new Set(locations.map((l) => l.building).filter(Boolean));
+    return ["All", ...Array.from(unique)];
+  }, [locations]);
+
+  const stats = useMemo(() => {
+    return {
+      total: locations.length,
+      buildings: new Set(locations.map((l) => l.building)).size,
+      activeQr: locations.length,
+      tickets: locations.reduce((s, l) => s + (l.tickets || 0), 0),
+    };
+  }, [locations]);
+
+  /* ---------------- Actions ---------------- */
   const handleCopy = async (qr) => {
     try {
       await navigator.clipboard.writeText(qr);
@@ -132,6 +132,13 @@ export default function AdminLocations() {
     } catch {}
   };
 
+  const handleCreated = (rawLocation) => {
+    const normalized = normalizeLocation(rawLocation);
+    setLocations((prev) => [normalized, ...prev]);
+    setAddOpen(false);
+  };
+
+  /* ---------------- Render ---------------- */
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -145,42 +152,60 @@ export default function AdminLocations() {
               Register campus buildings, rooms, and generate QR badges.
             </p>
           </div>
-          <motion.button
-            whileHover={{ y: -2 }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
-              bg-blue-600 text-white text-sm font-medium hover:bg-blue-700
-              shadow-[0_8px_24px_-8px_rgba(59,130,246,0.6)] transition shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            Add Location
-          </motion.button>
+          <div className="flex items-center gap-2">
+            <motion.button
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+              onClick={fetchLocations}
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl
+                bg-white border border-gray-200 text-gray-700 text-sm font-medium
+                hover:bg-gray-50 transition shrink-0 disabled:opacity-60"
+              title="Refresh"
+            >
+              <RefreshCw
+                className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
+              />
+            </motion.button>
+            <motion.button
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+              onClick={() => setAddOpen(true)}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
+                bg-blue-600 text-white text-sm font-medium hover:bg-blue-700
+                shadow-[0_8px_24px_-8px_rgba(59,130,246,0.6)] transition shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              Add Location
+            </motion.button>
+          </div>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <MiniStat
             label="Total Locations"
-            value={LOCATIONS.length}
+            value={stats.total}
             icon={MapPin}
             accent="bg-blue-50 text-blue-600"
           />
           <MiniStat
             label="Buildings"
-            value={new Set(LOCATIONS.map((l) => l.building)).size}
+            value={stats.buildings}
             icon={Building2}
             accent="bg-emerald-50 text-emerald-600"
           />
           <MiniStat
             label="QR Codes Active"
-            value={LOCATIONS.length}
+            value={stats.activeQr}
             icon={QrCode}
             accent="bg-indigo-50 text-indigo-600"
           />
           <MiniStat
             label="Total Tickets"
-            value={LOCATIONS.reduce((s, l) => s + l.tickets, 0)}
+            value={stats.tickets}
             icon={Hash}
             accent="bg-amber-50 text-amber-600"
           />
@@ -203,7 +228,7 @@ export default function AdminLocations() {
 
             <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
               <Filter className="w-4 h-4 text-gray-400 shrink-0 hidden lg:block" />
-              {BUILDINGS.map((b) => (
+              {buildingOptions.map((b) => (
                 <button
                   key={b}
                   onClick={() => setBuilding(b)}
@@ -219,7 +244,6 @@ export default function AdminLocations() {
               ))}
             </div>
 
-            {/* View toggle */}
             <div className="flex items-center gap-1 p-1 rounded-xl bg-gray-50 border border-gray-100 shrink-0 self-start lg:self-auto">
               <ViewButton
                 active={view === "list"}
@@ -241,11 +265,38 @@ export default function AdminLocations() {
         <div className="text-xs text-gray-500">
           Showing{" "}
           <span className="font-semibold text-gray-700">{filtered.length}</span>{" "}
-          of {LOCATIONS.length} locations
+          of {locations.length} locations
         </div>
 
-        {/* Locations */}
-        {filtered.length === 0 ? (
+        {/* Body */}
+        {loading ? (
+          <Card hover={false}>
+            <div className="p-10 flex flex-col items-center text-center">
+              <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+              <p className="mt-3 text-sm text-gray-500">Loading locations…</p>
+            </div>
+          </Card>
+        ) : loadError ? (
+          <Card hover={false}>
+            <div className="p-10 flex flex-col items-center text-center">
+              <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-red-50">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="mt-4 text-lg font-semibold text-gray-800">
+                Could not load locations
+              </h3>
+              <p className="mt-1 text-sm text-gray-500 max-w-sm">{loadError}</p>
+              <button
+                onClick={fetchLocations}
+                className="mt-4 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium
+                  bg-blue-600 text-white hover:bg-blue-700 transition"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Retry
+              </button>
+            </div>
+          </Card>
+        ) : filtered.length === 0 ? (
           <Card hover={false}>
             <div className="p-10 flex flex-col items-center text-center">
               <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-blue-50">
@@ -255,7 +306,9 @@ export default function AdminLocations() {
                 No locations found
               </h3>
               <p className="mt-1 text-sm text-gray-500">
-                Try adjusting your search or building filter.
+                {locations.length === 0
+                  ? "Add your first location to get started."
+                  : "Try adjusting your search or building filter."}
               </p>
             </div>
           </Card>
@@ -293,6 +346,16 @@ export default function AdminLocations() {
           </div>
         )}
       </div>
+
+      {/* Add Location Modal */}
+      <AnimatePresence>
+        {addOpen && (
+          <AddLocationModal
+            onClose={() => setAddOpen(false)}
+            onCreated={handleCreated}
+          />
+        )}
+      </AnimatePresence>
 
       {/* QR Preview Modal */}
       <AnimatePresence>
@@ -370,7 +433,6 @@ function LocationListRow({ loc, index, copied, onPreview, onCopy }) {
       whileHover={{ backgroundColor: "rgba(248,250,252,0.8)" }}
       className="relative flex items-center gap-4 px-5 py-4"
     >
-      {/* QR thumb */}
       <div
         className="w-10 h-10 shrink-0 flex items-center justify-center rounded-xl
         bg-gradient-to-br from-blue-500 to-indigo-600
@@ -379,7 +441,6 @@ function LocationListRow({ loc, index, copied, onPreview, onCopy }) {
         <QrCode className="w-5 h-5 text-white/95" />
       </div>
 
-      {/* Info */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="text-sm font-semibold text-gray-800 truncate">
@@ -401,7 +462,6 @@ function LocationListRow({ loc, index, copied, onPreview, onCopy }) {
         </div>
       </div>
 
-      {/* QR string (desktop) */}
       <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-100 shrink-0 w-52">
         <span className="text-[10px] font-mono text-gray-600 truncate flex-1">
           {loc.qr}
@@ -419,13 +479,11 @@ function LocationListRow({ loc, index, copied, onPreview, onCopy }) {
         </button>
       </div>
 
-      {/* Tickets count */}
       <div className="hidden md:flex items-center gap-1.5 text-xs text-gray-500 shrink-0 w-24">
         <DoorOpen className="w-3.5 h-3.5" />
         {loc.tickets} ticket{loc.tickets !== 1 ? "s" : ""}
       </div>
 
-      {/* Actions */}
       <div className="flex items-center gap-1 shrink-0">
         <button
           onClick={onPreview}
@@ -533,6 +591,224 @@ function LocationCard({ loc, index, copied, onPreview, onCopy }) {
         </div>
       </div>
     </motion.div>
+  );
+}
+
+/* ---------------- Add Location Modal ---------------- */
+function AddLocationModal({ onClose, onCreated }) {
+  const [form, setForm] = useState({
+    qr_code: "",
+    building: "",
+    floor: "",
+    room: "",
+  });
+  const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [serverError, setServerError] = useState(null);
+
+  const update = (key, value) => {
+    setForm((f) => ({ ...f, [key]: value }));
+    setErrors((e) => ({ ...e, [key]: undefined }));
+    setServerError(null);
+  };
+
+  const validate = () => {
+    const next = {};
+    if (!form.qr_code.trim()) next.qr_code = "QR code is required.";
+    if (!form.building.trim()) next.building = "Building is required.";
+    if (!form.floor.trim()) next.floor = "Floor is required.";
+    if (!form.room.trim()) next.room = "Room is required.";
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validate()) return;
+    setSubmitting(true);
+    setServerError(null);
+
+    try {
+      const created = await storeLocation({
+        qr_code: form.qr_code.trim(),
+        building: form.building.trim(),
+        floor: form.floor.trim(),
+        room: form.room.trim(),
+      });
+      onCreated(created);
+    } catch (err) {
+      // Axios errors carry response.data with Laravel's { message, errors }
+      const data = err?.response?.data;
+      if (data?.errors) {
+        const mapped = {};
+        Object.entries(data.errors).forEach(([k, v]) => {
+          mapped[k] = Array.isArray(v) ? v[0] : String(v);
+        });
+        setErrors(mapped);
+      } else {
+        setServerError(
+          data?.message ||
+            err?.message ||
+            "Something went wrong. Please try again.",
+        );
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md bg-white rounded-2xl border border-gray-100 overflow-hidden
+          shadow-[0_20px_60px_-20px_rgba(0,0,0,0.3)]"
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-50">
+              <MapPin className="w-4 h-4 text-blue-600" />
+            </div>
+            <h3 className="text-sm font-semibold text-gray-800">
+              Add New Location
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition"
+            disabled={submitting}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <Field
+            label="QR Code"
+            icon={QrCode}
+            placeholder="e.g. QR-ITBU-ROOM401"
+            value={form.qr_code}
+            onChange={(v) => update("qr_code", v)}
+            error={errors.qr_code}
+            disabled={submitting}
+            autoFocus
+          />
+          <Field
+            label="Building"
+            icon={Building2}
+            placeholder="e.g. Oscar Jereza"
+            value={form.building}
+            onChange={(v) => update("building", v)}
+            error={errors.building}
+            disabled={submitting}
+          />
+          <Field
+            label="Floor"
+            icon={Layers}
+            placeholder="e.g. 4th Floor"
+            value={form.floor}
+            onChange={(v) => update("floor", v)}
+            error={errors.floor}
+            disabled={submitting}
+          />
+          <Field
+            label="Room"
+            icon={DoorOpen}
+            placeholder="e.g. Room 401"
+            value={form.room}
+            onChange={(v) => update("room", v)}
+            error={errors.room}
+            disabled={submitting}
+          />
+
+          {serverError && (
+            <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+              {serverError}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="flex-1 inline-flex items-center justify-center px-3 py-2.5 rounded-xl text-sm font-medium
+                bg-gray-50 text-gray-700 hover:bg-gray-100 transition disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium
+                bg-blue-600 text-white hover:bg-blue-700 transition
+                shadow-[0_8px_24px_-8px_rgba(59,130,246,0.6)] disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-3.5 h-3.5" />
+                  Save Location
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ---------------- Reusable Field ---------------- */
+function Field({
+  label,
+  icon: Icon,
+  placeholder,
+  value,
+  onChange,
+  error,
+  disabled,
+  autoFocus,
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-700 mb-1.5">
+        {label}
+      </label>
+      <div className="relative">
+        <Icon className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+          autoFocus={autoFocus}
+          className={`w-full pl-10 pr-3 py-2.5 rounded-xl border text-sm bg-white
+            focus:outline-none focus:ring-2 transition disabled:opacity-60
+            ${
+              error
+                ? "border-red-300 focus:ring-red-500/30 focus:border-red-400"
+                : "border-gray-200 focus:ring-blue-500/40 focus:border-blue-400"
+            }`}
+        />
+      </div>
+      {error && <p className="mt-1 text-[11px] text-red-600">{error}</p>}
+    </div>
   );
 }
 

@@ -5,7 +5,19 @@ export const login = async ({ identifier, password }) => {
   return data;
 };
 
-export const register = async ({ name, email, password }) => {
-  const { data } = await api.post("/register", { name, email, password });
+export const register = async ({ name, email, password, school_id, username, role, department, course, year_level, contact, profile_pic }) => {
+  const { data } = await api.post("/register", {
+    name,
+    email,
+    password,
+    school_id,
+    username,
+    role,
+    department,
+    course,
+    year_level,
+    contact,
+    profile_pic,
+  });
   return data;
 };

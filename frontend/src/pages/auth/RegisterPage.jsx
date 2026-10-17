@@ -1,7 +1,7 @@
-// src/pages/auth/RegisterPage.jsx
-import { useState, useRef, useEffect } from "react";
+import { register } from "../../services/authService";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   QrCode,
   Mail,
@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   Sparkles,
   ArrowLeft,
-  ArrowRight,
   GraduationCap,
   BookOpen,
 } from "lucide-react";
@@ -45,22 +44,28 @@ const BENEFITS = [
 ];
 
 export default function RegisterPage() {
-  const [step, setStep] = useState("form"); // "form" | "otp"
   const [form, setForm] = useState({
     name: "",
-    identifier: "",
+    email: "",
     password: "",
     confirmPassword: "",
+    school_id: "",
+    username: "",
+    role: "Student",
+    department: "",
+    course: "",
+    year_level: "",
+    contact: "",
+    profile_pic: "",
   });
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const navigate = useNavigate();
 
   const update = (key) => (e) => setForm({ ...form, [key]: e.target.value });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
@@ -77,20 +82,24 @@ export default function RegisterPage() {
       return;
     }
 
-    // TODO: wire up to backend /api/register → then send OTP
-    setStep("otp");
-  };
-
-  const handleVerify = (e) => {
-    e.preventDefault();
-    const code = otp.join("");
-    if (code.length !== 6 || otp.some((d) => d === "")) {
-      setError("Please enter the 6-digit code.");
-      return;
+    try {
+      await register({
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        school_id: form.school_id || undefined,
+        username: form.username || undefined,
+        role: form.role,
+        department: form.department || undefined,
+        course: form.course || undefined,
+        year_level: form.year_level || undefined,
+        contact: form.contact || undefined,
+        profile_pic: form.profile_pic || undefined,
+      });
+      navigate("/login", { replace: true });
+    } catch (err) {
+      setError(err.response?.data?.message || "Registration failed. Please try again.");
     }
-    // TODO: wire up to backend /api/verify-otp
-    console.log("Verify code:", code);
-    navigate("/login", { replace: true });
   };
 
   return (
@@ -211,15 +220,11 @@ export default function RegisterPage() {
         </Link>
 
         <div className="w-full max-w-md">
-          <AnimatePresence mode="wait">
-            {step === "form" ? (
-              <motion.div
-                key="form"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-              >
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+          >
                 {/* Header */}
                 <div className="flex flex-col items-center mb-8">
                   <div
@@ -262,15 +267,106 @@ export default function RegisterPage() {
                     />
                   </Field>
 
-                  <Field label="Email or Student ID" icon={Mail}>
+                  <Field label="Email" icon={Mail}>
                     <input
-                      type="text"
-                      value={form.identifier}
-                      onChange={update("identifier")}
-                      placeholder="you@uspf.edu.ph or 2023-00123"
+                      type="email"
+                      value={form.email}
+                      onChange={update("email")}
+                      placeholder="you@uspf.edu.ph"
                       className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white/70
                         text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition"
                       required
+                    />
+                  </Field>
+
+                  <Field label="School ID" icon={User}>
+                    <input
+                      type="text"
+                      value={form.school_id}
+                      onChange={update("school_id")}
+                      placeholder="2023-00123"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white/70
+                        text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition"
+                    />
+                  </Field>
+
+                  <Field label="Username" icon={User}>
+                    <input
+                      type="text"
+                      value={form.username}
+                      onChange={update("username")}
+                      placeholder="jhanz"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white/70
+                        text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition"
+                    />
+                  </Field>
+
+                  <Field label="Role" icon={ShieldCheck}>
+                    <select
+                      value={form.role}
+                      onChange={update("role")}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white/70
+                        text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition"
+                    >
+                      <option value="Student">Student</option>
+                      <option value="Faculty">Faculty</option>
+                      <option value="Maintenance">Maintenance</option>
+                      <option value="Admin">Admin</option>
+                    </select>
+                  </Field>
+
+                  <Field label="Department" icon={BookOpen}>
+                    <input
+                      type="text"
+                      value={form.department}
+                      onChange={update("department")}
+                      placeholder="College of Computer Studies"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white/70
+                        text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition"
+                    />
+                  </Field>
+
+                  <Field label="Course" icon={GraduationCap}>
+                    <input
+                      type="text"
+                      value={form.course}
+                      onChange={update("course")}
+                      placeholder="BS Computer Science"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white/70
+                        text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition"
+                    />
+                  </Field>
+
+                  <Field label="Year Level" icon={BookOpen}>
+                    <input
+                      type="text"
+                      value={form.year_level}
+                      onChange={update("year_level")}
+                      placeholder="3rd Year"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white/70
+                        text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition"
+                    />
+                  </Field>
+
+                  <Field label="Contact" icon={Mail}>
+                    <input
+                      type="text"
+                      value={form.contact}
+                      onChange={update("contact")}
+                      placeholder="09123456789"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white/70
+                        text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition"
+                    />
+                  </Field>
+
+                  <Field label="Profile Picture URL" icon={QrCode}>
+                    <input
+                      type="text"
+                      value={form.profile_pic}
+                      onChange={update("profile_pic")}
+                      placeholder="https://example.com/photo.jpg"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white/70
+                        text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition"
                     />
                   </Field>
 
@@ -368,21 +464,6 @@ export default function RegisterPage() {
                   </Link>
                 </p>
               </motion.div>
-            ) : (
-              <OtpStep
-                key="otp"
-                otp={otp}
-                setOtp={setOtp}
-                error={error}
-                onSubmit={handleVerify}
-                onBack={() => {
-                  setStep("form");
-                  setError("");
-                  setOtp(["", "", "", "", "", ""]);
-                }}
-              />
-            )}
-          </AnimatePresence>
         </div>
       </div>
     </div>
@@ -401,149 +482,5 @@ function Field({ label, icon: Icon, children }) {
         {children}
       </div>
     </div>
-  );
-}
-
-/* ---------------- OTP Step ---------------- */
-function OtpStep({ otp, setOtp, error, onSubmit, onBack }) {
-  const inputRefs = useRef([]);
-
-  useEffect(() => {
-    inputRefs.current[0]?.focus();
-  }, []);
-
-  const handleChange = (index, value) => {
-    const digit = value.replace(/\D/g, "").slice(-1);
-    const next = [...otp];
-    next[index] = digit;
-    setOtp(next);
-    if (digit && index < 5) inputRefs.current[index + 1]?.focus();
-  };
-
-  const handleKeyDown = (index, e) => {
-    if (e.key === "Backspace" && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-    if (e.key === "ArrowLeft" && index > 0)
-      inputRefs.current[index - 1]?.focus();
-    if (e.key === "ArrowRight" && index < 5)
-      inputRefs.current[index + 1]?.focus();
-  };
-
-  const handlePaste = (e) => {
-    e.preventDefault();
-    const pasted = e.clipboardData
-      .getData("text")
-      .replace(/\D/g, "")
-      .slice(0, 6);
-    if (!pasted) return;
-    const next = ["", "", "", "", "", ""];
-    pasted.split("").forEach((d, i) => (next[i] = d));
-    setOtp(next);
-    const focusIndex = Math.min(pasted.length, 5);
-    inputRefs.current[focusIndex]?.focus();
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -12 }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
-    >
-      <button
-        onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-blue-600 transition mb-6"
-      >
-        <ArrowLeft className="w-3.5 h-3.5" />
-        Back
-      </button>
-
-      <div className="flex flex-col items-center mb-8">
-        <div
-          className="w-14 h-14 flex items-center justify-center rounded-2xl bg-blue-50
-          shadow-[0_8px_30px_-12px_rgba(59,130,246,0.4)]"
-        >
-          <Mail className="w-6 h-6 text-blue-600" />
-        </div>
-        <h1 className="mt-5 text-2xl font-bold text-gray-900 tracking-tight">
-          Verify your email
-        </h1>
-        <p className="mt-1 text-sm text-gray-500 text-center max-w-xs">
-          We sent a 6-digit confirmation code to your university email.
-        </p>
-      </div>
-
-      {error && (
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-4 px-4 py-2.5 rounded-xl bg-red-50 text-red-600 text-sm
-            border border-red-100 text-center"
-        >
-          {error}
-        </motion.div>
-      )}
-
-      <form onSubmit={onSubmit} className="space-y-6">
-        <div
-          className="flex items-center justify-center gap-2 sm:gap-3"
-          onPaste={handlePaste}
-        >
-          {otp.map((digit, i) => (
-            <motion.input
-              key={i}
-              ref={(el) => (inputRefs.current[i] = el)}
-              type="text"
-              inputMode="numeric"
-              maxLength={1}
-              value={digit}
-              onChange={(e) => handleChange(i, e.target.value)}
-              onKeyDown={(e) => handleKeyDown(i, e)}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05, duration: 0.25 }}
-              className={`w-12 h-14 sm:w-14 sm:h-16 text-center text-xl font-bold rounded-xl
-                border bg-white/70 text-gray-900
-                focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition
-                ${digit ? "border-blue-400" : "border-gray-200"}`}
-            />
-          ))}
-        </div>
-
-        <p className="text-center text-xs text-gray-500">
-          Didn't receive the code?{" "}
-          <button
-            type="button"
-            className="text-blue-600 font-medium hover:underline"
-          >
-            Resend
-          </button>
-        </p>
-
-        <motion.button
-          type="submit"
-          whileHover={{ y: -2 }}
-          whileTap={{ scale: 0.98 }}
-          transition={{ type: "spring", stiffness: 400, damping: 25 }}
-          className="w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium
-            hover:bg-blue-700 shadow-[0_12px_32px_-12px_rgba(59,130,246,0.7)] transition
-            inline-flex items-center justify-center gap-2"
-        >
-          Verify & Continue
-          <ArrowRight className="w-4 h-4" />
-        </motion.button>
-      </form>
-
-      <p className="mt-6 text-center text-xs text-gray-500">
-        Wrong email?{" "}
-        <button
-          onClick={onBack}
-          className="text-blue-600 font-medium hover:underline"
-        >
-          Go back
-        </button>
-      </p>
-    </motion.div>
   );
 }
